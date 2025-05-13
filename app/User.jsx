@@ -9,9 +9,9 @@ import {
   Modal,
   Button,
   StyleSheet,
-  ScrollView,
 } from 'react-native';
 import Profile from './Profile';
+import Icon from 'react-native-vector-icons/Ionicons'; // ✅ Import icons
 
 const books = [
   {
@@ -52,7 +52,9 @@ const App = () => {
   const [activeTab, setActiveTab] = useState('home');
   const [showProfile, setShowProfile] = useState(false);
   const [isLoggedIn, setIsLoggedIn] = useState(true);
-
+  const [requestType, setRequestType] = useState('');
+  const [startDate, setStartDate] = useState('');
+  const [returnDate, setReturnDate] = useState('');
   const [transactionHistory, setTransactionHistory] = useState([
     {
       id: 'txn1',
@@ -72,12 +74,7 @@ const App = () => {
     },
   ]);
 
-  const [requestType, setRequestType] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [returnDate, setReturnDate] = useState('');
-
   const handleLogout = () => {
-    console.log('Logout pressed');
     setIsLoggedIn(false);
     setProfileModalVisible(false);
   };
@@ -188,21 +185,25 @@ const App = () => {
                 </View>
               </View>
 
+              {/* Bottom Nav with Icons */}
               <View style={styles.tabContainer}>
                 <TouchableOpacity
                   style={[styles.navButton, activeTab === 'home' && styles.activeNavButton]}
                   onPress={() => setActiveTab('home')}
                 >
+                  <Icon name="home-outline" size={24} color={activeTab === 'home' ? '#fff' : '#002D62'} />
                   <Text style={[styles.navButtonText, activeTab === 'home' && styles.activeNavText]}>Home</Text>
                 </TouchableOpacity>
                 <TouchableOpacity
                   style={[styles.navButton, activeTab === 'transaction' && styles.activeNavButton]}
                   onPress={() => setActiveTab('transaction')}
                 >
+                  <Icon name="swap-horizontal-outline" size={24} color={activeTab === 'transaction' ? '#fff' : '#002D62'} />
                   <Text style={[styles.navButtonText, activeTab === 'transaction' && styles.activeNavText]}>Transaction</Text>
                 </TouchableOpacity>
               </View>
 
+              {/* Modals */}
               <Modal visible={bookModalVisible} animationType="slide" transparent>
                 <View style={styles.modalContainer}>
                   <View style={styles.modalContent}>
@@ -273,7 +274,6 @@ const styles = StyleSheet.create({
     justifyContent: 'space-between',
     padding: 10,
     backgroundColor: '#002D62',
-    marginTop: -10,
   },
   logo: { width: 120, height: 40, resizeMode: 'contain' },
   searchBar: {
@@ -307,50 +307,90 @@ const styles = StyleSheet.create({
     resizeMode: 'cover',
     borderRadius: 10,
   },
-  bookTitle: { fontSize: 16, fontWeight: 'bold', marginTop: 5 },
-  bookAuthor: { fontSize: 14, color: '#555' },
-  bookStatus: { marginTop: 5, fontSize: 12, fontWeight: 'bold' },
+  bookTitle: { fontSize: 16, fontWeight: 'bold' },
+  bookAuthor: { fontSize: 14, color: '#666' },
+  bookStatus: { marginTop: 5 },
   available: { color: 'green' },
   borrowed: { color: 'red' },
-
+  tabContainer: {
+    flexDirection: 'row',
+    justifyContent: 'space-around',
+    backgroundColor: '#eee',
+    paddingVertical: 10,
+    borderTopWidth: 1,
+    borderColor: '#ccc',
+  },
+  navButton: {
+    alignItems: 'center',
+  },
+  navButtonText: {
+    fontSize: 14,
+    color: '#002D62',
+    marginTop: 2,
+  },
+  activeNavButton: {
+    backgroundColor: '#002D62',
+    paddingHorizontal: 15,
+    paddingVertical: 5,
+    borderRadius: 10,
+  },
+  activeNavText: {
+    color: '#fff',
+  },
   modalContainer: {
     flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
     backgroundColor: 'rgba(0,0,0,0.5)',
+    justifyContent: 'center',
+    padding: 20,
   },
   modalContent: {
     backgroundColor: '#fff',
     padding: 20,
     borderRadius: 10,
-    width: 300,
   },
-  modalTitle: { fontSize: 18, fontWeight: 'bold', marginBottom: 15 },
-  input: { borderWidth: 1, borderColor: '#ddd', marginBottom: 15, padding: 8 },
-  modalActions: { flexDirection: 'row', justifyContent: 'space-between' },
-  modalOption: { fontSize: 16, marginVertical: 10 },
-  transactionSection: { marginTop: 30 },
-  transactionText: { fontSize: 18, fontWeight: 'bold' },
-
-  navButton: { flex: 1, alignItems: 'center', paddingVertical: 10 },
-  activeNavButton: {
-    backgroundColor: '#3B82F6',
+  modalTitle: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  input: {
+    borderWidth: 1,
+    borderColor: '#ccc',
+    padding: 8,
     borderRadius: 5,
+    marginBottom: 10,
   },
-  navButtonText: { fontSize: 16, color: '#555' },
-  activeNavText: { color: '#fff' },
-
-  tabContainer: {
+  modalActions: {
     flexDirection: 'row',
-    position: 'absolute',
-    bottom: 0,
-    left: 0,
-    right: 0,
-    backgroundColor: '#fff',
-    paddingHorizontal: 15,
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderTopColor: '#ddd',
+    justifyContent: 'space-between',
+  },
+  modalOption: {
+    fontSize: 16,
+    color: '#007BFF',
+    marginVertical: 5,
+  },
+  transactionSection: {
+    padding: 15,
+  },
+  transactionText: {
+    fontSize: 18,
+    fontWeight: 'bold',
+    marginBottom: 10,
+  },
+  transactionItem: {
+    marginBottom: 10,
+    padding: 10,
+    backgroundColor: '#f4f4f4',
+    borderRadius: 8,
+  },
+  loginContainer: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+  },
+  loginText: {
+    fontSize: 18,
+    fontWeight: 'bold',
   },
 });
 

@@ -142,9 +142,6 @@ const StudentList = () => {
         >
           <FontAwesome5 name="bars" size={24} color="#111827" />
         </TouchableOpacity>
-
-        <Text style={styles.title}>Student List</Text>
-
         <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
           <Text style={styles.addButtonText}>+ Add New Student</Text>
         </TouchableOpacity>

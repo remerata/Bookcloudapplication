@@ -190,7 +190,6 @@ const AvailableBooks = () => {
       <View style={styles.container}>
         <View style={styles.header}>
           <TouchableOpacity onPress={toggleSidebar}><Text style={styles.hamburger}>☰</Text></TouchableOpacity>
-          <Text style={styles.headerText}>Available Books</Text>
         </View>
 
         <Modal visible={sidebarVisible} animationType="slide" transparent={true}>

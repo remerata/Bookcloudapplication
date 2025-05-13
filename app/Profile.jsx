@@ -94,16 +94,6 @@ export default function EditProfileScreen() {
           <Picker.Item label="Other" value="Other" />
         </Picker>
       </View>
-
-      {/* Profile Image Section */}
-      <Text style={styles.label}>Profile Image</Text>
-      <TouchableOpacity onPress={handleChooseImage} style={styles.imageButton}>
-        <Text style={styles.imageButtonText}>Choose Profile Image</Text>
-      </TouchableOpacity>
-      {profileImage && (
-        <Image source={{ uri: profileImage }} style={styles.profileImagePreview} />
-      )}
-
       {/* Submit Button */}
       <TouchableOpacity onPress={handleSubmit} style={styles.button}>
         <Text style={styles.buttonText}>Update Profile</Text>

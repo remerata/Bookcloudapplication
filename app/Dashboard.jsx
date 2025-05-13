@@ -57,7 +57,6 @@ const Dashboard = () => {
         <TouchableOpacity onPress={() => setSidebarVisible(true)}>
           <FontAwesome5 name="bars" size={24} color="#2d3748" />
         </TouchableOpacity>
-        <Text style={styles.title}>Dashboard</Text>
       </View>
 
       {/* Cards */}
