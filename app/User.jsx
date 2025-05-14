@@ -1,397 +1,278 @@
-import React, { useState } from 'react';
+// User.jsx
+import React, { useState, useEffect } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  Image,
-  TouchableOpacity,
-  FlatList,
-  Modal,
-  Button,
-  StyleSheet,
+  View, Text, TextInput, Image, TouchableOpacity,
+  FlatList, Modal, Button, ActivityIndicator,
+  StyleSheet, Platform, Alert
 } from 'react-native';
+import DateTimePicker from '@react-native-community/datetimepicker';
+import { Picker } from '@react-native-picker/picker';
+import Icon from 'react-native-vector-icons/Ionicons';
 import Profile from './Profile';
-import Icon from 'react-native-vector-icons/Ionicons'; // ✅ Import icons
 
-const books = [
-  {
-    id: '1',
-    title: 'Nature',
-    author: 'Olivia Wilson',
-    status: 'Borrowed',
-    image: require('../assets/images/img/nature-1.jpg'),
-  },
-  {
-    id: '2',
-    title: 'Writing You In The Stars',
-    author: 'Samysa Hamida',
-    status: 'Available',
-    image: require('../assets/images/img/nature-2.jpg'),
-  },
-  {
-    id: '3',
-    title: 'SOUL',
-    author: 'Olivia Wilson',
-    status: 'Borrowed',
-    image: require('../assets/images/img/nature-1.jpg'),
-  },
-  {
-    id: '4',
-    title: 'Writing You In The Stars',
-    author: 'Samysa Hamida',
-    status: 'Available',
-    image: require('../assets/images/img/nature-2.jpg'),
-  },
-];
+import { db, auth } from '../firebaseConfig';
+import {
+  collection, onSnapshot, query, orderBy,
+  addDoc, updateDoc, doc, getDoc
+} from 'firebase/firestore';
+import { signOut } from 'firebase/auth';
 
-const App = () => {
+export default function User() {
   const [search, setSearch] = useState('');
+  const [books, setBooks] = useState([]);
+  const [loading, setLoading] = useState(true);
   const [bookModalVisible, setBookModalVisible] = useState(false);
   const [profileModalVisible, setProfileModalVisible] = useState(false);
   const [selectedBook, setSelectedBook] = useState(null);
   const [activeTab, setActiveTab] = useState('home');
   const [showProfile, setShowProfile] = useState(false);
-  const [isLoggedIn, setIsLoggedIn] = useState(true);
-  const [requestType, setRequestType] = useState('');
-  const [startDate, setStartDate] = useState('');
-  const [returnDate, setReturnDate] = useState('');
-  const [transactionHistory, setTransactionHistory] = useState([
-    {
-      id: 'txn1',
-      bookTitle: 'Nature',
-      bookAuthor: 'Olivia Wilson',
-      requestType: 'Borrow',
-      startDate: '2025-04-10',
-      returnDate: '2025-04-17',
-    },
-    {
-      id: 'txn2',
-      bookTitle: 'Writing You In The Stars',
-      bookAuthor: 'Samysa Hamida',
-      requestType: 'Reserve',
-      startDate: '2025-04-15',
-      returnDate: '2025-04-22',
-    },
-  ]);
 
-  const handleLogout = () => {
-    setIsLoggedIn(false);
+  // form state
+  const [requestType, setRequestType] = useState('Borrow');
+  const [startDate, setStartDate] = useState(new Date());
+  const [returnDate, setReturnDate] = useState(new Date());
+  const [showStartPicker, setShowStartPicker] = useState(false);
+  const [showReturnPicker, setShowReturnPicker] = useState(false);
+
+  const [transactionHistory, setTransactionHistory] = useState([]);
+
+  // Load books
+  useEffect(() => {
+    const booksRef = collection(db, 'books');
+    const q = query(booksRef, orderBy('createdAt','desc'));
+    const unsub = onSnapshot(q, snap => {
+      setBooks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  // Load this user's transactions
+  useEffect(() => {
+    const txRef = collection(db,'transactions');
+    const unsub = onSnapshot(txRef, snap => {
+      const all = snap.docs.map(d => ({ id:d.id, ...d.data() }));
+      const mine = all
+        .filter(tx=> tx.userId===auth.currentUser?.uid)
+        .sort((a,b)=> b.createdAt.toMillis()-a.createdAt.toMillis());
+      setTransactionHistory(mine);
+    });
+    return ()=>unsub();
+  },[]);
+
+  const handleLogout = async () => {
+    await signOut(auth);
+    setShowProfile(false);
     setProfileModalVisible(false);
   };
-
   const navigateToProfile = () => {
     setProfileModalVisible(false);
     setShowProfile(true);
   };
 
-  const handleTransactionSubmit = () => {
-    const newTransaction = {
-      id: Math.random().toString(36).substring(7),
-      bookTitle: selectedBook.title,
-      bookAuthor: selectedBook.author,
-      requestType,
-      startDate,
-      returnDate,
-    };
+  const openBookModal = (book) => {
+    setSelectedBook(book);
+    setRequestType('Borrow');
+    setStartDate(new Date());
+    setReturnDate(new Date());
+    setBookModalVisible(true);
+  };
 
-    setTransactionHistory([...transactionHistory, newTransaction]);
-    setBookModalVisible(false);
-    setRequestType('');
-    setStartDate('');
-    setReturnDate('');
+  const handleTransactionSubmit = async () => {
+    if (!auth.currentUser || !selectedBook) return;
+    try {
+      // 1️⃣ Lookup user full name
+      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      const fullname = userDoc.exists() ? userDoc.data().fullname : auth.currentUser.email;
+
+      // 2️⃣ write a transaction record
+      await addDoc(collection(db,'transactions'), {
+        userId: auth.currentUser.uid,
+        requesterName: fullname,
+        bookId: selectedBook.id,
+        bookTitle: selectedBook.bookTitle,
+        requestType,
+        startDate: startDate.toISOString(),
+        returnDate: returnDate.toISOString(),
+        createdAt: new Date()
+      });
+
+      // 3️⃣ update the book doc to Pending + store requesterName
+      const bookRef = doc(db,'books',selectedBook.id);
+      await updateDoc(bookRef, {
+        status: 'Pending',
+        type: requestType,
+        requester: auth.currentUser.uid,
+        requesterName: fullname,
+        startDate: startDate.toISOString(),
+        dueDate: returnDate.toISOString()
+      });
+
+      setBookModalVisible(false);
+    } catch(err) {
+      console.error(err);
+      Alert.alert('Error','Could not submit request');
+    }
   };
 
   const renderBookItem = ({ item }) => (
-    <TouchableOpacity
-      style={styles.bookCard}
-      onPress={() => {
-        setSelectedBook(item);
-        setBookModalVisible(true);
-      }}
-    >
-      <Image source={item.image} style={styles.bookImage} />
-      <Text style={styles.bookTitle}>{item.title}</Text>
-      <Text style={styles.bookAuthor}>{item.author}</Text>
-      <Text
-        style={[
-          styles.bookStatus,
-          item.status === 'Available' ? styles.available : styles.borrowed,
-        ]}
-      >
-        {item.status}
+    <TouchableOpacity style={styles.bookCard} onPress={()=>openBookModal(item)}>
+      <Image source={{uri:item.coverUrl}} style={styles.bookImage}/>
+      <Text style={styles.bookTitle}>{item.bookTitle}</Text>
+      <Text style={styles.bookAuthor}>by {item.author}</Text>
+      <Text style={[
+        styles.bookStatus,
+        item.status==='Available'?styles.available: styles.borrowed
+      ]}>
+        {item.status||'Available'}
       </Text>
     </TouchableOpacity>
   );
-
-  const renderTransactionItem = ({ item }) => (
+  const renderTransactionItem = ({item})=>(
     <View style={styles.transactionItem}>
-      <Text>{item.bookTitle} by {item.bookAuthor}</Text>
+      <Text>{item.bookTitle}</Text>
       <Text>Type: {item.requestType}</Text>
-      <Text>Start Date: {item.startDate}</Text>
-      <Text>Return Date: {item.returnDate}</Text>
+      <Text>From: {new Date(item.startDate).toDateString()}</Text>
+      <Text>To: {new Date(item.returnDate).toDateString()}</Text>
+    </View>
+  );
+
+  if (loading) return (
+    <View style={styles.centered}>
+      <ActivityIndicator size="large"/>
+      <Text>Loading...</Text>
     </View>
   );
 
   return (
     <View style={styles.container}>
-      {isLoggedIn ? (
-        <>
-          {showProfile ? (
-            <Profile />
-          ) : (
-            <>
-              <View style={styles.mainContent}>
-                <View style={styles.navbar}>
-                  <Image
-                    source={require('../assets/images/img/logo2.png')}
-                    style={styles.logo}
-                  />
-                  <TextInput
-                    style={styles.searchBar}
-                    placeholder="Search for books..."
-                    value={search}
-                    onChangeText={setSearch}
-                  />
-                  <TouchableOpacity
-                    style={styles.profileButton}
-                    onPress={() => setProfileModalVisible(true)}
-                  >
-                    <Text style={styles.profileText}>U</Text>
-                  </TouchableOpacity>
-                </View>
-
-                <View style={styles.contentContainer}>
-                  {activeTab === 'home' ? (
-                    <FlatList
-                      data={books}
-                      keyExtractor={(item) => item.id}
-                      numColumns={2}
-                      renderItem={renderBookItem}
-                    />
-                  ) : (
-                    <View style={styles.transactionSection}>
-                      <Text style={styles.transactionText}>Transaction History</Text>
-                      {transactionHistory.length === 0 ? (
-                        <Text>No transactions found.</Text>
-                      ) : (
-                        <FlatList
-                          data={transactionHistory}
-                          keyExtractor={(item) => item.id}
-                          renderItem={renderTransactionItem}
-                        />
-                      )}
-                    </View>
-                  )}
-                </View>
-              </View>
-
-              {/* Bottom Nav with Icons */}
-              <View style={styles.tabContainer}>
-                <TouchableOpacity
-                  style={[styles.navButton, activeTab === 'home' && styles.activeNavButton]}
-                  onPress={() => setActiveTab('home')}
-                >
-                  <Icon name="home-outline" size={24} color={activeTab === 'home' ? '#fff' : '#002D62'} />
-                  <Text style={[styles.navButtonText, activeTab === 'home' && styles.activeNavText]}>Home</Text>
-                </TouchableOpacity>
-                <TouchableOpacity
-                  style={[styles.navButton, activeTab === 'transaction' && styles.activeNavButton]}
-                  onPress={() => setActiveTab('transaction')}
-                >
-                  <Icon name="swap-horizontal-outline" size={24} color={activeTab === 'transaction' ? '#fff' : '#002D62'} />
-                  <Text style={[styles.navButtonText, activeTab === 'transaction' && styles.activeNavText]}>Transaction</Text>
-                </TouchableOpacity>
-              </View>
-
-              {/* Modals */}
-              <Modal visible={bookModalVisible} animationType="slide" transparent>
-                <View style={styles.modalContainer}>
-                  <View style={styles.modalContent}>
-                    <Text style={styles.modalTitle}>Request Book</Text>
-                    <Text>Request Type:</Text>
-                    <TextInput
-                      placeholder="Borrow or Reserve"
-                      style={styles.input}
-                      value={requestType}
-                      onChangeText={setRequestType}
-                    />
-                    <Text>Start Date:</Text>
-                    <TextInput
-                      placeholder="YYYY-MM-DD"
-                      style={styles.input}
-                      value={startDate}
-                      onChangeText={setStartDate}
-                    />
-                    <Text>Return Date:</Text>
-                    <TextInput
-                      placeholder="YYYY-MM-DD"
-                      style={styles.input}
-                      value={returnDate}
-                      onChangeText={setReturnDate}
-                    />
-                    <View style={styles.modalActions}>
-                      <Button title="Cancel" onPress={() => setBookModalVisible(false)} />
-                      <Button title="Submit Request" onPress={handleTransactionSubmit} />
-                    </View>
-                  </View>
-                </View>
-              </Modal>
-
-              <Modal visible={profileModalVisible} animationType="slide" transparent>
-                <View style={styles.modalContainer}>
-                  <View style={styles.modalContent}>
-                    <Text style={styles.modalTitle}>Profile Options</Text>
-                    <TouchableOpacity onPress={navigateToProfile}>
-                      <Text style={styles.modalOption}>Edit Profile</Text>
-                    </TouchableOpacity>
-                    <TouchableOpacity onPress={handleLogout}>
-                      <Text style={styles.modalOption}>Logout</Text>
-                    </TouchableOpacity>
-                    <View style={styles.modalActions}>
-                      <Button title="Cancel" onPress={() => setProfileModalVisible(false)} />
-                    </View>
-                  </View>
-                </View>
-              </Modal>
-            </>
-          )}
-        </>
-      ) : (
-        <View style={styles.loginContainer}>
-          <Text style={styles.loginText}>You have logged out</Text>
+      {showProfile ? <Profile /> : <>
+        {/* Navbar */}
+        <View style={styles.navbar}>
+          <TextInput
+            style={styles.searchBar}
+            placeholder="Search..."
+            value={search}
+            onChangeText={setSearch}
+          />
+          <TouchableOpacity onPress={()=>setProfileModalVisible(true)}>
+            <Icon name="person-circle-outline" size={28} />
+          </TouchableOpacity>
         </View>
-      )}
+
+        {/* Main Content */}
+        {activeTab==='home' ? (
+          <FlatList
+            data={books.filter(b=>b.bookTitle.toLowerCase().includes(search.toLowerCase()))}
+            keyExtractor={i=>i.id}
+            numColumns={2}
+            renderItem={renderBookItem}
+          />
+        ) : (
+          <FlatList
+            data={transactionHistory}
+            keyExtractor={i=>i.id}
+            renderItem={renderTransactionItem}
+            ListEmptyComponent={<Text style={styles.emptyText}>No transactions</Text>}
+          />
+        )}
+
+        {/* Tabs */}
+        <View style={styles.tabContainer}>
+          {['home','transaction'].map(tab=>(
+            <TouchableOpacity
+              key={tab}
+              style={[styles.navButton,activeTab===tab&&styles.activeNavButton]}
+              onPress={()=>setActiveTab(tab)}
+            >
+              <Icon
+                name={tab==='home'?'home-outline':'swap-horizontal-outline'}
+                size={24}
+                color={activeTab===tab?'#fff':'#000'}
+              />
+              <Text>{tab==='home'?'Home':'My Requests'}</Text>
+            </TouchableOpacity>
+          ))}
+        </View>
+
+        {/* Request Modal */}
+        <Modal visible={bookModalVisible} transparent animationType="slide">
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <Text style={styles.modalTitle}>Request Book</Text>
+              <Picker
+                selectedValue={requestType}
+                onValueChange={setRequestType}
+                style={styles.picker}
+              >
+                <Picker.Item label="Borrow" value="Borrow"/>
+                <Picker.Item label="Reserve" value="Reserve"/>
+              </Picker>
+              <TouchableOpacity onPress={()=>setShowStartPicker(true)}>
+                <Text style={styles.dateText}>From: {startDate.toDateString()}</Text>
+              </TouchableOpacity>
+              {showStartPicker && (
+                <DateTimePicker
+                  value={startDate}
+                  mode="date"
+                  display="default"
+                  onChange={(e,d)=>{setShowStartPicker(false); d&&setStartDate(d);}}
+                />
+              )}
+              <TouchableOpacity onPress={()=>setShowReturnPicker(true)}>
+                <Text style={styles.dateText}>To: {returnDate.toDateString()}</Text>
+              </TouchableOpacity>
+              {showReturnPicker && (
+                <DateTimePicker
+                  value={returnDate}
+                  mode="date"
+                  display="default"
+                  onChange={(e,d)=>{setShowReturnPicker(false); d&&setReturnDate(d);}}
+                />
+              )}
+              <View style={styles.modalActions}>
+                <Button title="Cancel" onPress={()=>setBookModalVisible(false)}/>
+                <Button title="Submit" onPress={handleTransactionSubmit}/>
+              </View>
+            </View>
+          </View>
+        </Modal>
+
+        {/* Profile Modal */}
+        <Modal visible={profileModalVisible} transparent animationType="slide">
+          <View style={styles.modalContainer}>
+            <View style={styles.modalContent}>
+              <Button title="Edit Profile" onPress={navigateToProfile}/>
+              <Button title="Logout" onPress={handleLogout}/>
+              <Button title="Cancel" onPress={()=>setProfileModalVisible(false)}/>
+            </View>
+          </View>
+        </Modal>
+      </>}
     </View>
   );
-};
+}
 
 const styles = StyleSheet.create({
-  container: { flex: 1, backgroundColor: '#fff' },
-  mainContent: { flex: 1, paddingBottom: 70 },
-  navbar: {
-    flexDirection: 'row',
-    alignItems: 'center',
-    justifyContent: 'space-between',
-    padding: 10,
-    backgroundColor: '#002D62',
-  },
-  logo: { width: 120, height: 40, resizeMode: 'contain' },
-  searchBar: {
-    flex: 1,
-    marginHorizontal: 10,
-    padding: 8,
-    backgroundColor: '#fff',
-    borderRadius: 10,
-  },
-  profileButton: {
-    width: 40,
-    height: 40,
-    backgroundColor: '#fff',
-    borderRadius: 20,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  profileText: { fontSize: 18, fontWeight: 'bold' },
-  contentContainer: { flex: 1 },
-  bookCard: {
-    flex: 1,
-    margin: 10,
-    backgroundColor: '#f8f8f8',
-    borderRadius: 10,
-    padding: 10,
-    alignItems: 'center',
-  },
-  bookImage: {
-    width: 150,
-    height: 200,
-    resizeMode: 'cover',
-    borderRadius: 10,
-  },
-  bookTitle: { fontSize: 16, fontWeight: 'bold' },
-  bookAuthor: { fontSize: 14, color: '#666' },
-  bookStatus: { marginTop: 5 },
-  available: { color: 'green' },
-  borrowed: { color: 'red' },
-  tabContainer: {
-    flexDirection: 'row',
-    justifyContent: 'space-around',
-    backgroundColor: '#eee',
-    paddingVertical: 10,
-    borderTopWidth: 1,
-    borderColor: '#ccc',
-  },
-  navButton: {
-    alignItems: 'center',
-  },
-  navButtonText: {
-    fontSize: 14,
-    color: '#002D62',
-    marginTop: 2,
-  },
-  activeNavButton: {
-    backgroundColor: '#002D62',
-    paddingHorizontal: 15,
-    paddingVertical: 5,
-    borderRadius: 10,
-  },
-  activeNavText: {
-    color: '#fff',
-  },
-  modalContainer: {
-    flex: 1,
-    backgroundColor: 'rgba(0,0,0,0.5)',
-    justifyContent: 'center',
-    padding: 20,
-  },
-  modalContent: {
-    backgroundColor: '#fff',
-    padding: 20,
-    borderRadius: 10,
-  },
-  modalTitle: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  input: {
-    borderWidth: 1,
-    borderColor: '#ccc',
-    padding: 8,
-    borderRadius: 5,
-    marginBottom: 10,
-  },
-  modalActions: {
-    flexDirection: 'row',
-    justifyContent: 'space-between',
-  },
-  modalOption: {
-    fontSize: 16,
-    color: '#007BFF',
-    marginVertical: 5,
-  },
-  transactionSection: {
-    padding: 15,
-  },
-  transactionText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-    marginBottom: 10,
-  },
-  transactionItem: {
-    marginBottom: 10,
-    padding: 10,
-    backgroundColor: '#f4f4f4',
-    borderRadius: 8,
-  },
-  loginContainer: {
-    flex: 1,
-    justifyContent: 'center',
-    alignItems: 'center',
-  },
-  loginText: {
-    fontSize: 18,
-    fontWeight: 'bold',
-  },
+  container:{flex:1,backgroundColor:'#fff'},
+  centered:{flex:1,justifyContent:'center',alignItems:'center'},
+  navbar:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',padding:10,backgroundColor:'#002D62'},
+  searchBar:{flex:1,backgroundColor:'#fff',borderRadius:8,padding:8,marginRight:10},
+  bookCard:{flex:1,margin:10,alignItems:'center'},
+  bookImage:{width:120,height:160,borderRadius:8,marginBottom:8},
+  bookTitle:{fontWeight:'bold'},
+  bookAuthor:{color:'#666'},
+  bookStatus:{marginTop:4},
+  available:{color:'green'}, borrowed:{color:'red'},
+  tabContainer:{flexDirection:'row',justifyContent:'space-around',backgroundColor:'#eee',paddingVertical:10},
+  navButton:{alignItems:'center'},
+  activeNavButton:{backgroundColor:'#002D62',padding:6,borderRadius:6},
+  modalContainer:{flex:1,justifyContent:'center',backgroundColor:'rgba(0,0,0,0.5)'},
+  modalContent:{backgroundColor:'#fff',margin:20,padding:20,borderRadius:8},
+  modalTitle:{fontSize:18,fontWeight:'bold',marginBottom:10},
+  picker:{height:50,width:'100%',marginBottom:10},
+  dateText:{fontSize:16,marginVertical:8},
+  modalActions:{flexDirection:'row',justifyContent:'space-between',marginTop:10},
+  transactionItem:{padding:10,borderBottomWidth:1,borderColor:'#ddd'},
+  emptyText:{textAlign:'center',marginTop:20}
 });
-
-export default App;

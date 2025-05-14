@@ -1,23 +1,57 @@
 import React, { useState } from 'react';
 import {
-  View,
-  Text,
-  TextInput,
-  TouchableOpacity,
-  StyleSheet,
-  Image,
-  KeyboardAvoidingView,
-  Platform,
+  View, Text, TextInput, TouchableOpacity,
+  StyleSheet, Image, KeyboardAvoidingView,
+  Platform, Alert
 } from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 
+import { auth, db } from '../firebaseConfig';
+import { signInWithEmailAndPassword } from 'firebase/auth';
+import { doc, getDoc } from 'firebase/firestore';
+
 export default function LoginScreen() {
   const navigation = useNavigation();
-  const [email, setEmail] = useState('');
+  const [email, setEmail]       = useState('');
   const [password, setPassword] = useState('');
 
-  const handleLogin = () => {
-    navigation.navigate('User'); // Go directly to User screen
+  const handleLogin = async () => {
+    if (!email || !password) {
+      return Alert.alert('Error', 'Please enter both email and password.');
+    }
+
+    try {
+      // Sign in
+      const userCred = await signInWithEmailAndPassword(auth, email, password);
+      const uid = userCred.user.uid;
+
+      // Fetch profile
+      const userDoc = await getDoc(doc(db, 'users', uid));
+      if (!userDoc.exists()) throw new Error('Profile not found');
+      const { role } = userDoc.data();
+
+      // Route by role
+      if (role === 1) {
+        navigation.replace('Dashboard');
+      } else {
+        navigation.replace('User');
+      }
+    } catch (error) {
+      console.error(error);
+      let message = 'Login failed';
+      switch (error.code) {
+        case 'auth/invalid-email':
+          message = 'Invalid email address.';
+          break;
+        case 'auth/user-not-found':
+          message = 'No account found for this email.';
+          break;
+        case 'auth/wrong-password':
+          message = 'Incorrect password.';
+          break;
+      }
+      Alert.alert('Error', message);
+    }
   };
 
   return (
@@ -36,6 +70,8 @@ export default function LoginScreen() {
           style={styles.input}
           placeholder="Email"
           placeholderTextColor="#ccc"
+          keyboardType="email-address"
+          autoCapitalize="none"
           value={email}
           onChangeText={setEmail}
         />
@@ -43,23 +79,21 @@ export default function LoginScreen() {
           style={styles.input}
           placeholder="Password"
           placeholderTextColor="#ccc"
+          secureTextEntry
           value={password}
           onChangeText={setPassword}
-          secureTextEntry
         />
-  <View style={styles.registerContainer}>
-                    <Text style={styles.registerText}>Don't have an account? </Text>
-                    <TouchableOpacity onPress={() => navigation.navigate('Register')}>
-                      <Text style={styles.registerLink}>Register</Text>
-                    </TouchableOpacity>
-                  </View>
-        <TouchableOpacity
-          style={styles.loginButton}
-          onPress={handleLogin}
-        >
+
+        <View style={styles.registerContainer}>
+          <Text style={styles.registerText}>Don't have an account? </Text>
+          <TouchableOpacity onPress={() => navigation.navigate('Register')}>
+            <Text style={styles.registerLink}>Register</Text>
+          </TouchableOpacity>
+        </View>
+
+        <TouchableOpacity style={styles.loginButton} onPress={handleLogin}>
           <Text style={styles.loginButtonText}>Login</Text>
         </TouchableOpacity>
-      
       </View>
     </KeyboardAvoidingView>
   );

@@ -1,43 +1,92 @@
+// RegisterScreen.jsx
 import React, { useState } from 'react';
-import { ScrollView, View, Text, TextInput, TouchableOpacity, StyleSheet, Image, Alert, KeyboardAvoidingView, Platform } from 'react-native';
+import {
+  ScrollView,
+  View,
+  Text,
+  TextInput,
+  TouchableOpacity,
+  StyleSheet,
+  Image,
+  Alert,
+  KeyboardAvoidingView,
+  Platform
+} from 'react-native';
 import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
-import { Picker } from '@react-native-picker/picker'; // Import Picker
+import { Picker } from '@react-native-picker/picker';
+
+import { auth, db } from '../firebaseConfig';
+import { createUserWithEmailAndPassword } from 'firebase/auth';
+import { doc, setDoc } from 'firebase/firestore';
 
 export default function RegisterScreen() {
   const navigation = useNavigation();
-  const [fullname, setFullname] = useState('');
-  const [email, setEmail] = useState('');
-  const [studentid, setStudentid] = useState('');
+  const [fullname, setFullname]           = useState('');
+  const [email, setEmail]                 = useState('');
+  const [studentid, setStudentid]         = useState('');
   const [courseSection, setCourseSection] = useState('');
-  const [gender, setGender] = useState('');
-  const [password, setPassword] = useState('');
+  const [gender, setGender]               = useState('');
+  const [password, setPassword]           = useState('');
   const [confirmPassword, setConfirmPassword] = useState('');
-  const [phone_number, setPhoneNumber] = useState('');
-  const [passwordVisible, setPasswordVisible] = useState(false);
+  const [phone_number, setPhoneNumber]    = useState('');
+  const [passwordVisible, setPasswordVisible]         = useState(false);
   const [confirmPasswordVisible, setConfirmPasswordVisible] = useState(false);
-  const [isLoading, setIsLoading] = useState(false);
+  const [isLoading, setIsLoading]         = useState(false);
 
-  const handleRegister = () => {
-    setIsLoading(true);
-
+  const handleRegister = async () => {
     if (password !== confirmPassword) {
-      Alert.alert('Error', 'Passwords do not match!');
-      setIsLoading(false);
-      return;
+      return Alert.alert('Error', 'Passwords do not match!');
+    }
+    if (!fullname || !email || !studentid || !courseSection || !gender || !phone_number) {
+      return Alert.alert('Error', 'Please fill out all fields.');
     }
 
-    setTimeout(() => {
+    setIsLoading(true);
+    try {
+      // 1️⃣ Create user in Auth
+      const userCred = await createUserWithEmailAndPassword(auth, email, password);
+      const uid      = userCred.user.uid;
+
+      // 2️⃣ Save additional profile info in Firestore
+      await setDoc(doc(db, 'users', uid), {
+        fullname,
+        email,
+        studentid,
+        courseSection,
+        gender,
+        phone_number,
+        role: 0,  
+        createdAt: new Date()
+      });
+
       Alert.alert('Success', 'Account created successfully!');
+      navigation.navigate('Login');
+    } catch (error) {
+      console.error(error);
+      let message = 'Registration failed';
+      switch (error.code) {
+        case 'auth/email-already-in-use':
+          message = 'That email is already in use.';
+          break;
+        case 'auth/invalid-email':
+          message = 'That email address is invalid.';
+          break;
+        case 'auth/weak-password':
+          message = 'Password should be at least 6 characters.';
+          break;
+      }
+      Alert.alert('Error', message);
+    } finally {
       setIsLoading(false);
-    }, 1000);
+    }
   };
 
   const togglePasswordVisibility = (field) => {
     if (field === 'password') {
-      setPasswordVisible(!passwordVisible);
-    } else if (field === 'confirmPassword') {
-      setConfirmPasswordVisible(!confirmPasswordVisible);
+      setPasswordVisible(v => !v);
+    } else {
+      setConfirmPasswordVisible(v => !v);
     }
   };
 
@@ -49,62 +98,69 @@ export default function RegisterScreen() {
       <ScrollView contentContainerStyle={styles.scrollContainer}>
         <Image source={require('../assets/images/img/sign.jpg')} style={styles.backgroundImage} />
         <View style={styles.overlay} />
-        
+
         <View style={styles.formContainer}>
-                  <Image source={require('../assets/images/img/logo2.png')} style={styles.logo} />
-          
+          <Image source={require('../assets/images/img/logo2.png')} style={styles.logo} />
           <Text style={styles.title}>Create Account</Text>
 
           <TextInput
             style={styles.input}
             placeholder="Full Name"
+            placeholderTextColor="#ccc"
             value={fullname}
             onChangeText={setFullname}
           />
           <TextInput
             style={styles.input}
             placeholder="Email"
+            placeholderTextColor="#ccc"
+            autoCapitalize="none"
+            keyboardType="email-address"
             value={email}
             onChangeText={setEmail}
           />
           <TextInput
             style={styles.input}
             placeholder="Student ID"
+            placeholderTextColor="#ccc"
             value={studentid}
             onChangeText={setStudentid}
           />
           <TextInput
             style={styles.input}
             placeholder="Course & Section"
+            placeholderTextColor="#ccc"
             value={courseSection}
             onChangeText={setCourseSection}
           />
           <TextInput
             style={styles.input}
             placeholder="Phone Number"
+            placeholderTextColor="#ccc"
+            keyboardType="phone-pad"
             value={phone_number}
             onChangeText={setPhoneNumber}
           />
 
-<View style={styles.input}>
-      <Text style={styles.selectLabel}>Gender</Text>
-      <Picker
-        selectedValue={gender}
-        onValueChange={(itemValue) => setGender(itemValue)}
-        style={styles.picker}
-      >
-        <Picker.Item label="Select Gender" value="" />
-        <Picker.Item label="Male" value="Male" />
-        <Picker.Item label="Female" value="Female" />
-        <Picker.Item label="Other" value="Other" />
-      </Picker>
-    </View>
-
+          <View style={[styles.input, { padding: 0 }]}>
+            <Text style={styles.selectLabel}>Gender</Text>
+            <Picker
+              selectedValue={gender}
+              onValueChange={setGender}
+              style={styles.picker}
+            >
+              <Picker.Item label="Select Gender" value="" />
+              <Picker.Item label="Male" value="Male" />
+              <Picker.Item label="Female" value="Female" />
+              <Picker.Item label="Other" value="Other" />
+            </Picker>
+          </View>
 
           <View style={styles.input}>
             <TextInput
               style={styles.textInput}
               placeholder="Password"
+              placeholderTextColor="#ccc"
               secureTextEntry={!passwordVisible}
               value={password}
               onChangeText={setPassword}
@@ -118,6 +174,7 @@ export default function RegisterScreen() {
             <TextInput
               style={styles.textInput}
               placeholder="Confirm Password"
+              placeholderTextColor="#ccc"
               secureTextEntry={!confirmPasswordVisible}
               value={confirmPassword}
               onChangeText={setConfirmPassword}
@@ -126,8 +183,6 @@ export default function RegisterScreen() {
               <Ionicons name={confirmPasswordVisible ? 'eye-off' : 'eye'} size={24} color="white" />
             </TouchableOpacity>
           </View>
-
-          
 
           <TouchableOpacity
             style={styles.registerButton}
