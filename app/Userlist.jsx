@@ -18,17 +18,32 @@ import Sidebar from './Sidebar';
 
 // Firestore imports
 import { db } from '../firebaseConfig';
-import { collection, onSnapshot, addDoc, updateDoc, deleteDoc, doc } from 'firebase/firestore';
+import {
+  collection,
+  onSnapshot,
+  addDoc,
+  updateDoc,
+  deleteDoc,
+  doc,
+} from 'firebase/firestore';
 
 const { width, height } = Dimensions.get('window');
 
 const StudentList = () => {
   const [students, setStudents] = useState([]);
+  const [filteredStudents, setFilteredStudents] = useState([]);
+  const [searchQuery, setSearchQuery] = useState('');
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
   const [modalVisible, setModalVisible] = useState(false);
   const [editStudent, setEditStudent] = useState(null);
-  const [newStudent, setNewStudent] = useState({ fullname: '', email: '', courseSection: '', gender: '', phone_number: '' });
+  const [newStudent, setNewStudent] = useState({
+    fullname: '',
+    email: '',
+    courseSection: '',
+    gender: '',
+    phone_number: '',
+  });
   const [isSidebarVisible, setSidebarVisible] = useState(false);
 
   // Real-time fetch users
@@ -38,6 +53,7 @@ const StudentList = () => {
       snapshot => {
         const list = snapshot.docs.map(docSnap => ({ id: docSnap.id, ...docSnap.data() }));
         setStudents(list);
+        setFilteredStudents(list);
         setLoading(false);
       },
       err => {
@@ -49,9 +65,29 @@ const StudentList = () => {
     return () => unsub();
   }, []);
 
+  // Filter on searchQuery change
+  useEffect(() => {
+    const q = searchQuery.toLowerCase();
+    setFilteredStudents(
+      students.filter(student =>
+        student.fullname?.toLowerCase().includes(q) ||
+        student.email?.toLowerCase().includes(q) ||
+        student.courseSection?.toLowerCase().includes(q) ||
+        student.gender?.toLowerCase().includes(q) ||
+        student.phone_number?.toLowerCase().includes(q)
+      )
+    );
+  }, [searchQuery, students]);
+
   const openAddModal = () => {
     setEditStudent(null);
-    setNewStudent({ fullname: '', email: '', courseSection: '', gender: '', phone_number: '' });
+    setNewStudent({
+      fullname: '',
+      email: '',
+      courseSection: '',
+      gender: '',
+      phone_number: '',
+    });
     setModalVisible(true);
   };
 
@@ -81,7 +117,13 @@ const StudentList = () => {
     } finally {
       setModalVisible(false);
       setEditStudent(null);
-      setNewStudent({ fullname: '', email: '', courseSection: '', gender: '', phone_number: '' });
+      setNewStudent({
+        fullname: '',
+        email: '',
+        courseSection: '',
+        gender: '',
+        phone_number: '',
+      });
     }
   };
 
@@ -91,22 +133,37 @@ const StudentList = () => {
       'Are you sure you want to delete this student?',
       [
         { text: 'Cancel', style: 'cancel' },
-        { text: 'Delete', style: 'destructive', onPress: async () => {
-            try { await deleteDoc(doc(db, 'users', id)); }
-            catch (err) { console.error('Error deleting user:', err); Alert.alert('Error', 'Could not delete user'); }
-          }
-        }
+        {
+          text: 'Delete',
+          style: 'destructive',
+          onPress: async () => {
+            try {
+              await deleteDoc(doc(db, 'users', id));
+            } catch (err) {
+              console.error('Error deleting user:', err);
+              Alert.alert('Error', 'Could not delete user');
+            }
+          },
+        },
       ],
       { cancelable: true }
     );
   };
 
-  if (loading) return (
-    <View style={styles.centered}><ActivityIndicator size="large"/><Text>Loading users...</Text></View>
-  );
-  if (error) return (
-    <View style={styles.centered}><Text style={styles.errorText}>{error}</Text></View>
-  );
+  if (loading)
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large" />
+        <Text>Loading users...</Text>
+      </View>
+    );
+
+  if (error)
+    return (
+      <View style={styles.centered}>
+        <Text style={styles.errorText}>{error}</Text>
+      </View>
+    );
 
   return (
     <View style={styles.container}>
@@ -115,25 +172,54 @@ const StudentList = () => {
         <TouchableOpacity style={styles.hamburger} onPress={() => setSidebarVisible(!isSidebarVisible)}>
           <FontAwesome5 name="bars" size={24} color="#111827" />
         </TouchableOpacity>
+
+        {/* Search Bar */}
+        <TextInput
+          style={styles.searchInput}
+          placeholder="Search by name, email, phone, course, or gender"
+          placeholderTextColor="#999"
+          value={searchQuery}
+          onChangeText={text => setSearchQuery(text)}
+        />
+
         <TouchableOpacity style={styles.addButton} onPress={openAddModal}>
           <Text style={styles.addButtonText}>+ Add New Student</Text>
         </TouchableOpacity>
 
         <ScrollView contentContainerStyle={styles.scrollContent}>
-          {students.length === 0 ? (
+          {filteredStudents.length === 0 ? (
             <Text style={styles.emptyText}>No users found</Text>
           ) : (
-            students.map(s => (
+            filteredStudents.map(s => (
               <View key={s.id} style={styles.card}>
-                <View style={styles.infoBlock}><Text style={styles.label}>Name:</Text><Text style={styles.value}>{s.fullname}</Text></View>
-                <View style={styles.infoBlock}><Text style={styles.label}>Email:</Text><Text style={styles.value}>{s.email}</Text></View>
-                <View style={styles.infoBlock}><Text style={styles.label}>Course:</Text><Text style={styles.value}>{s.courseSection}</Text></View>
-                <View style={styles.infoBlock}><Text style={styles.label}>Gender:</Text><Text style={styles.value}>{s.gender}</Text></View>
-                <View style={styles.infoBlock}><Text style={styles.label}>Phone:</Text><Text style={styles.value}>{s.phone_number}</Text></View>
+                <View style={styles.infoBlock}>
+                  <Text style={styles.label}>Name:</Text>
+                  <Text style={styles.value}>{s.fullname}</Text>
+                </View>
+                <View style={styles.infoBlock}>
+                  <Text style={styles.label}>Email:</Text>
+                  <Text style={styles.value}>{s.email}</Text>
+                </View>
+                <View style={styles.infoBlock}>
+                  <Text style={styles.label}>Course:</Text>
+                  <Text style={styles.value}>{s.courseSection}</Text>
+                </View>
+                <View style={styles.infoBlock}>
+                  <Text style={styles.label}>Gender:</Text>
+                  <Text style={styles.value}>{s.gender}</Text>
+                </View>
+                <View style={styles.infoBlock}>
+                  <Text style={styles.label}>Phone:</Text>
+                  <Text style={styles.value}>{s.phone_number}</Text>
+                </View>
                 <View style={styles.actions}>
-                  <TouchableOpacity onPress={() => openEditModal(s)}><Text style={styles.edit}>Edit</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={() => openEditModal(s)}>
+                    <Text style={styles.edit}>Edit</Text>
+                  </TouchableOpacity>
                   <Text style={styles.separator}> | </Text>
-                  <TouchableOpacity onPress={() => handleDelete(s.id)}><Text style={styles.delete}>Delete</Text></TouchableOpacity>
+                  <TouchableOpacity onPress={() => handleDelete(s.id)}>
+                    <Text style={styles.delete}>Delete</Text>
+                  </TouchableOpacity>
                 </View>
               </View>
             ))
@@ -145,11 +231,13 @@ const StudentList = () => {
         <View style={styles.modalOverlay}>
           <View style={styles.modalContainer}>
             <Text style={styles.modalTitle}>{editStudent ? 'Edit Student' : 'Add New Student'}</Text>
-            {['fullname','email','courseSection','gender','phone_number'].map(field => (
-              <TextInput key={field} style={styles.input}
-                placeholder={field.charAt(0).toUpperCase()+field.slice(1)}
+            {['fullname', 'email', 'courseSection', 'gender', 'phone_number'].map(field => (
+              <TextInput
+                key={field}
+                style={styles.input}
+                placeholder={field.charAt(0).toUpperCase() + field.slice(1)}
                 value={newStudent[field]}
-                onChangeText={t=>setNewStudent({...newStudent,[field]:t})}
+                onChangeText={t => setNewStudent({ ...newStudent, [field]: t })}
               />
             ))}
             <View style={styles.modalActions}>
@@ -164,28 +252,76 @@ const StudentList = () => {
 };
 
 const styles = StyleSheet.create({
-  container:{flex:1},
-  background:{width,height,paddingHorizontal:20,paddingTop:60},
-  centered:{flex:1,justifyContent:'center',alignItems:'center'},
-  errorText:{color:'red'},
-  emptyText:{textAlign:'center',marginTop:20,color:'#555'},
-  hamburger:{position:'absolute',top:50,left:20,zIndex:10,backgroundColor:'#ffffffcc',padding:8,borderRadius:10},
-  addButton:{backgroundColor:'#2563eb',paddingVertical:10,paddingHorizontal:16,borderRadius:8,alignSelf:'flex-end',marginBottom:20},
-  addButtonText:{color:'#fff',fontSize:14,fontWeight:'600'},
-  scrollContent:{paddingBottom:100},
-  card:{backgroundColor:'#fff',padding:16,borderRadius:10,marginBottom:16,elevation:3},
-  infoBlock:{flexDirection:'row',marginBottom:6},
-  label:{fontWeight:'600',fontSize:14,width:120,color:'#374151'},
-  value:{fontSize:14,color:'#1f2937'},
-  actions:{flexDirection:'row',marginTop:10,justifyContent:'flex-end'},
-  edit:{color:'#2563eb',fontWeight:'600'},
-  delete:{color:'#dc2626',fontWeight:'600'},
-  separator:{marginHorizontal:8,color:'#6b7280'},
-  modalOverlay:{flex:1,justifyContent:'center',alignItems:'center',backgroundColor:'rgba(0,0,0,0.5)'},
-  modalContainer:{backgroundColor:'white',padding:20,borderRadius:10,width:'80%'},
-  modalTitle:{fontSize:20,fontWeight:'600',marginBottom:20},
-  input:{borderBottomWidth:1,marginBottom:10,padding:8,fontSize:16},
-  modalActions:{marginTop:20}
+  container: { flex: 1 },
+  background: { width, height, paddingHorizontal: 20, paddingTop: 60 },
+  centered: { flex: 1, justifyContent: 'center', alignItems: 'center' },
+  errorText: { color: 'red' },
+  emptyText: { textAlign: 'center', marginTop: 20, color: '#555' },
+  hamburger: {
+    position: 'absolute',
+    top: 50,
+    left: 20,
+    zIndex: 10,
+    backgroundColor: '#ffffffcc',
+    padding: 8,
+    borderRadius: 10,
+  },
+  searchInput: {
+    backgroundColor: '#fff',
+    borderRadius: 8,
+    padding: 1,
+    marginVertical: -8,
+    fontSize: 16,
+    marginLeft:40 ,
+  },
+  addButton: {
+    backgroundColor: '#2563eb',
+    paddingVertical: 10,
+    paddingHorizontal: 16,
+    marginVertical: 20,
+    borderRadius: 8,
+    alignSelf: 'flex-end',
+    marginBottom: 20,
+  },
+  addButtonText: {
+    color: '#fff',
+    fontSize: 14,
+    fontWeight: '600',
+  },
+  scrollContent: { paddingBottom: 100 },
+  card: {
+    backgroundColor: '#fff',
+    padding: 16,
+    borderRadius: 10,
+    marginBottom: 16,
+    elevation: 3,
+  },
+  infoBlock: { flexDirection: 'row', marginBottom: 6 },
+  label: { fontWeight: '600', fontSize: 14, width: 120, color: '#374151' },
+  value: { fontSize: 14, color: '#1f2937' },
+  actions: { flexDirection: 'row', marginTop: 10, justifyContent: 'flex-end' },
+  edit: { color: '#2563eb', fontWeight: '600' },
+  delete: { color: '#dc2626', fontWeight: '600' },
+  separator: { marginHorizontal: 8, color: '#6b7280' },
+  modalOverlay: {
+    flex: 1,
+    justifyContent: 'center',
+    alignItems: 'center',
+    backgroundColor: 'rgba(0,0,0,0.5)',
+  },
+  modalContainer: {
+    backgroundColor: 'white',
+    padding: 20,
+    borderRadius: 10,
+    width: '80%',
+  },
+  modalTitle: { fontSize: 20, fontWeight: '600', marginBottom: 20 },
+  input: { borderBottomWidth: 1, marginBottom: 10, padding: 8, fontSize: 16 },
+  modalActions: {
+    marginTop: 20,
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+  },
 });
 
 export default StudentList;

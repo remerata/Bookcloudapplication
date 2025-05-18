@@ -3,7 +3,7 @@ import React, { useState, useEffect } from 'react';
 import {
   View, Text, TextInput, Image, TouchableOpacity,
   FlatList, Modal, Button, ActivityIndicator,
-  StyleSheet, Platform, Alert
+  StyleSheet, Alert
 } from 'react-native';
 import DateTimePicker from '@react-native-community/datetimepicker';
 import { Picker } from '@react-native-picker/picker';
@@ -38,27 +38,30 @@ export default function User() {
 
   // Load books
   useEffect(() => {
-    const booksRef = collection(db, 'books');
-    const q = query(booksRef, orderBy('createdAt','desc'));
-    const unsub = onSnapshot(q, snap => {
-      setBooks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
-      setLoading(false);
-    });
+    const unsub = onSnapshot(
+      query(collection(db, 'books'), orderBy('createdAt', 'desc')),
+      snap => {
+        setBooks(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+        setLoading(false);
+      }
+    );
     return () => unsub();
   }, []);
 
   // Load this user's transactions
   useEffect(() => {
-    const txRef = collection(db,'transactions');
-    const unsub = onSnapshot(txRef, snap => {
-      const all = snap.docs.map(d => ({ id:d.id, ...d.data() }));
-      const mine = all
-        .filter(tx=> tx.userId===auth.currentUser?.uid)
-        .sort((a,b)=> b.createdAt.toMillis()-a.createdAt.toMillis());
-      setTransactionHistory(mine);
-    });
-    return ()=>unsub();
-  },[]);
+    const unsub = onSnapshot(
+      collection(db, 'transactions'),
+      snap => {
+        const all = snap.docs.map(d => ({ id: d.id, ...d.data() }));
+        const mine = all
+          .filter(tx => tx.userId === auth.currentUser?.uid)
+          .sort((a, b) => b.createdAt.toMillis() - a.createdAt.toMillis());
+        setTransactionHistory(mine);
+      }
+    );
+    return () => unsub();
+  }, []);
 
   const handleLogout = async () => {
     await signOut(auth);
@@ -70,7 +73,8 @@ export default function User() {
     setShowProfile(true);
   };
 
-  const openBookModal = (book) => {
+  // Open modal only if book is currently available
+  const openBookModal = book => {
     setSelectedBook(book);
     setRequestType('Borrow');
     setStartDate(new Date());
@@ -80,13 +84,20 @@ export default function User() {
 
   const handleTransactionSubmit = async () => {
     if (!auth.currentUser || !selectedBook) return;
-    try {
-      // 1️⃣ Lookup user full name
-      const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
-      const fullname = userDoc.exists() ? userDoc.data().fullname : auth.currentUser.email;
 
-      // 2️⃣ write a transaction record
-      await addDoc(collection(db,'transactions'), {
+    // Prevent double‑booking
+    if (selectedBook.status !== 'Available') {
+      Alert.alert('Unavailable', 'This book is not currently available.');
+      return;
+    }
+
+    try {
+      // 1) Fetch full name
+      const u = await getDoc(doc(db, 'users', auth.currentUser.uid));
+      const fullname = u.exists() ? u.data().fullname : auth.currentUser.email;
+
+      // 2) Create transaction (Pending)
+      await addDoc(collection(db, 'transactions'), {
         userId: auth.currentUser.uid,
         requesterName: fullname,
         bookId: selectedBook.id,
@@ -94,59 +105,80 @@ export default function User() {
         requestType,
         startDate: startDate.toISOString(),
         returnDate: returnDate.toISOString(),
-        createdAt: new Date()
+        createdAt: new Date(),
+        status: 'Pending',
       });
 
-      // 3️⃣ update the book doc to Pending + store requesterName
-      const bookRef = doc(db,'books',selectedBook.id);
-      await updateDoc(bookRef, {
+      // 3) Mark book Pending
+      await updateDoc(doc(db, 'books', selectedBook.id), {
         status: 'Pending',
         type: requestType,
         requester: auth.currentUser.uid,
         requesterName: fullname,
         startDate: startDate.toISOString(),
-        dueDate: returnDate.toISOString()
+        dueDate: returnDate.toISOString(),
       });
 
       setBookModalVisible(false);
-    } catch(err) {
+    } catch (err) {
       console.error(err);
-      Alert.alert('Error','Could not submit request');
+      Alert.alert('Error', 'Could not submit request');
     }
   };
 
   const renderBookItem = ({ item }) => (
-    <TouchableOpacity style={styles.bookCard} onPress={()=>openBookModal(item)}>
-      <Image source={{uri:item.coverUrl}} style={styles.bookImage}/>
+    <TouchableOpacity
+      style={styles.bookCard}
+      onPress={() => openBookModal(item)}
+      disabled={item.status !== 'Available'}
+    >
+      <Image source={{ uri: item.coverUrl }} style={styles.bookImage}/>
       <Text style={styles.bookTitle}>{item.bookTitle}</Text>
       <Text style={styles.bookAuthor}>by {item.author}</Text>
       <Text style={[
         styles.bookStatus,
-        item.status==='Available'?styles.available: styles.borrowed
+        item.status === 'Available' ? styles.available : styles.borrowed
       ]}>
-        {item.status||'Available'}
+        {item.status || 'Available'}
       </Text>
     </TouchableOpacity>
   );
-  const renderTransactionItem = ({item})=>(
-    <View style={styles.transactionItem}>
-      <Text>{item.bookTitle}</Text>
-      <Text>Type: {item.requestType}</Text>
-      <Text>From: {new Date(item.startDate).toDateString()}</Text>
-      <Text>To: {new Date(item.returnDate).toDateString()}</Text>
-    </View>
-  );
 
-  if (loading) return (
-    <View style={styles.centered}>
-      <ActivityIndicator size="large"/>
-      <Text>Loading...</Text>
-    </View>
-  );
+  const renderTransactionItem = ({ item }) => {
+    const status = item.status || 'Pending';
+    const map = {
+      Pending: styles.txPending,
+      Approved: styles.txApproved,
+      Rejected: styles.txRejected,
+      Borrowed: styles.txBorrowed,
+      Reserved: styles.txReserved,
+      Returned: styles.txReturned,
+    };
+    const style = map[status] || styles.txPending;
+
+    return (
+      <View style={styles.transactionItem}>
+        <Text style={styles.txBookTitle}>{item.bookTitle}</Text>
+        <Text>Action: {item.requestType}</Text>
+        <Text>From: {new Date(item.startDate).toDateString()}</Text>
+        <Text>To: {new Date(item.returnDate).toDateString()}</Text>
+        <Text style={[styles.txStatus, style]}>Status: {status}</Text>
+      </View>
+    );
+  };
+
+  if (loading) {
+    return (
+      <View style={styles.centered}>
+        <ActivityIndicator size="large"/>
+        <Text>Loading...</Text>
+      </View>
+    );
+  }
 
   return (
     <View style={styles.container}>
-      {showProfile ? <Profile /> : <>
+      {showProfile ? <Profile/> : <>
         {/* Navbar */}
         <View style={styles.navbar}>
           <TextInput
@@ -156,20 +188,26 @@ export default function User() {
             onChangeText={setSearch}
           />
           <TouchableOpacity onPress={()=>setProfileModalVisible(true)}>
-            <Icon name="person-circle-outline" size={28} />
+            <Icon name="person-circle-outline" size={28} color="#fff" />
           </TouchableOpacity>
         </View>
 
         {/* Main Content */}
         {activeTab==='home' ? (
           <FlatList
-            data={books.filter(b=>b.bookTitle.toLowerCase().includes(search.toLowerCase()))}
-            keyExtractor={i=>i.id}
+            key="homeList"
+            data={books.filter(b =>
+              b.bookTitle?.toLowerCase().includes(search.toLowerCase()) ||
+              b.author?.toLowerCase().includes(search.toLowerCase()) ||
+              b.status?.toLowerCase().includes(search.toLowerCase())
+            )}
             numColumns={2}
+            keyExtractor={i=>i.id}
             renderItem={renderBookItem}
           />
         ) : (
           <FlatList
+            key="txList"
             data={transactionHistory}
             keyExtractor={i=>i.id}
             renderItem={renderTransactionItem}
@@ -182,7 +220,7 @@ export default function User() {
           {['home','transaction'].map(tab=>(
             <TouchableOpacity
               key={tab}
-              style={[styles.navButton,activeTab===tab&&styles.activeNavButton]}
+              style={[styles.navButton, activeTab===tab && styles.activeNavButton]}
               onPress={()=>setActiveTab(tab)}
             >
               <Icon
@@ -190,7 +228,9 @@ export default function User() {
                 size={24}
                 color={activeTab===tab?'#fff':'#000'}
               />
-              <Text>{tab==='home'?'Home':'My Requests'}</Text>
+              <Text style={activeTab===tab?{color:'#fff'}:undefined}>
+                {tab==='home'?'Home':'My Requests'}
+              </Text>
             </TouchableOpacity>
           ))}
         </View>
@@ -216,7 +256,7 @@ export default function User() {
                   value={startDate}
                   mode="date"
                   display="default"
-                  onChange={(e,d)=>{setShowStartPicker(false); d&&setStartDate(d);}}
+                  onChange={(e,d)=>{ setShowStartPicker(false); d&&setStartDate(d); }}
                 />
               )}
               <TouchableOpacity onPress={()=>setShowReturnPicker(true)}>
@@ -227,12 +267,16 @@ export default function User() {
                   value={returnDate}
                   mode="date"
                   display="default"
-                  onChange={(e,d)=>{setShowReturnPicker(false); d&&setReturnDate(d);}}
+                  onChange={(e,d)=>{ setShowReturnPicker(false); d&&setReturnDate(d); }}
                 />
               )}
               <View style={styles.modalActions}>
                 <Button title="Cancel" onPress={()=>setBookModalVisible(false)}/>
-                <Button title="Submit" onPress={handleTransactionSubmit}/>
+                <Button
+                  title="Submit"
+                  onPress={handleTransactionSubmit}
+                  disabled={selectedBook?.status !== 'Available'}
+                />
               </View>
             </View>
           </View>
@@ -258,21 +302,34 @@ const styles = StyleSheet.create({
   centered:{flex:1,justifyContent:'center',alignItems:'center'},
   navbar:{flexDirection:'row',justifyContent:'space-between',alignItems:'center',padding:10,backgroundColor:'#002D62'},
   searchBar:{flex:1,backgroundColor:'#fff',borderRadius:8,padding:8,marginRight:10},
-  bookCard:{flex:1,margin:10,alignItems:'center'},
+  bookCard:{flex:1,margin:10,alignItems:'center',opacity:1},
   bookImage:{width:120,height:160,borderRadius:8,marginBottom:8},
   bookTitle:{fontWeight:'bold'},
   bookAuthor:{color:'#666'},
   bookStatus:{marginTop:4},
-  available:{color:'green'}, borrowed:{color:'red'},
+  available:{color:'green'},
+  borrowed:{color:'red'},
+
   tabContainer:{flexDirection:'row',justifyContent:'space-around',backgroundColor:'#eee',paddingVertical:10},
   navButton:{alignItems:'center'},
   activeNavButton:{backgroundColor:'#002D62',padding:6,borderRadius:6},
+
   modalContainer:{flex:1,justifyContent:'center',backgroundColor:'rgba(0,0,0,0.5)'},
   modalContent:{backgroundColor:'#fff',margin:20,padding:20,borderRadius:8},
   modalTitle:{fontSize:18,fontWeight:'bold',marginBottom:10},
   picker:{height:50,width:'100%',marginBottom:10},
   dateText:{fontSize:16,marginVertical:8},
   modalActions:{flexDirection:'row',justifyContent:'space-between',marginTop:10},
+
   transactionItem:{padding:10,borderBottomWidth:1,borderColor:'#ddd'},
+  txBookTitle:{fontWeight:'bold'},
+  txStatus:{marginTop:4,fontWeight:'bold'},
+  txPending:{color:'#FFA500'},
+  txApproved:{color:'green'},
+  txRejected:{color:'red'},
+  txBorrowed:{color:'#1E90FF'},
+  txReserved:{color:'#8A2BE2'},
+  txReturned:{color:'#32CD32'},
+
   emptyText:{textAlign:'center',marginTop:20}
 });
