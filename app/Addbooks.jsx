@@ -19,7 +19,7 @@ import DateTimePicker from '@react-native-community/datetimepicker';
 import { FontAwesome5 } from '@expo/vector-icons';
 
 // Firestore imports
-import { db } from '../firebaseConfig';
+import { db } from '../firebaseconfig';
 import { addDoc, collection, Timestamp } from 'firebase/firestore';
 
 // ── Cloudinary configuration ─────────────────────────────────────────────────

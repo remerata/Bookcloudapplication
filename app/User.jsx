@@ -10,7 +10,7 @@ import { Picker } from '@react-native-picker/picker';
 import Icon from 'react-native-vector-icons/Ionicons';
 import Profile from './Profile';
 
-import { db, auth } from '../firebaseConfig';
+import { db, auth } from '../firebaseconfig';
 import {
   collection, onSnapshot, query, orderBy,
   addDoc, updateDoc, doc, getDoc

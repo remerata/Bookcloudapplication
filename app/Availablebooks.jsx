@@ -18,7 +18,7 @@ import * as ImagePicker from 'expo-image-picker';
 import Sidebar from './Sidebar';
 
 // Firestore imports
-import { db } from '../firebaseConfig';
+import { db } from '../firebaseconfig';
 
 import {
   collection,

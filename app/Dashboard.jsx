@@ -11,7 +11,7 @@ import {
 } from 'react-native';
 import { FontAwesome5 } from '@expo/vector-icons';
 import Sidebar from './Sidebar';
-import { db } from '../firebaseConfig';
+import { db } from '../firebaseconfig';
 import {
   collection,
   onSnapshot,

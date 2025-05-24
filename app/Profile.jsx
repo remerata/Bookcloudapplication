@@ -16,7 +16,7 @@ import { useNavigation } from '@react-navigation/native';
 import { Ionicons } from '@expo/vector-icons';
 import { Picker } from '@react-native-picker/picker';
 
-import { auth, db } from '../firebaseConfig';
+import { db } from '../firebaseconfig';
 import { doc, getDoc, updateDoc } from 'firebase/firestore';
 
 export default function EditProfile() {
