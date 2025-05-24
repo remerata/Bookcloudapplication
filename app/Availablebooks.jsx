@@ -19,6 +19,7 @@ import Sidebar from './Sidebar';
 
 // Firestore imports
 import { db } from '../firebaseConfig';
+
 import {
   collection,
   onSnapshot,
@@ -334,8 +335,6 @@ const AvailableBooks = () => {
               ListEmptyComponent={<Text style={styles.emptyText}>No requests</Text>}
             />
           );
-          
-
         case 'borrowed':
           return (
             <FlatList
