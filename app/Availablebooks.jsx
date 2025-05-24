@@ -142,27 +142,57 @@ const AvailableBooks = () => {
   };
 
   // Approve a pending request
-  const approveRequest = async book => {
+  const approveRequest = async (book) => {
     try {
       const bookRef = doc(db, 'books', book.id);
+  
+      // Determine new status based on the request type
       const newStatus = book.type === 'Reserve' ? 'Reserved' : 'Borrowed';
-      await updateDoc(bookRef, {
+  
+      // Build the update object
+      const updateData = {
         status: newStatus,
         type: '',
-        borrower: newStatus === 'Borrowed' ? book.requesterId : '',
-        reserver: newStatus === 'Reserved' ? book.requesterId : '',
-        dueDate: book.dueDate,
+        dueDate: book.dueDate || '',
         requesterId: '',
         requesterName: '',
         requesterPhone: '',
-      });
-      await updateTransactionStatus(book.id, newStatus);
+      };
+  
+      // Assign borrower or reserver depending on status
+      if (newStatus === 'Borrowed') {
+        updateData.borrower = book.requesterId || '';
+        updateData.reserver = '';
+      } else if (newStatus === 'Reserved') {
+        updateData.reserver = book.requesterId || '';
+        updateData.borrower = '';
+      }
+  
+      // Update the book document
+      await updateDoc(bookRef, updateData);
+  
+      // Update all matching pending transactions and await completion
+      const txSnap = await getDocs(
+        query(
+          collection(db, 'transactions'),
+          where('bookId', '==', book.id),
+          where('status', '==', 'Pending')
+        )
+      );
+  
+      // Update transactions sequentially (await all updates)
+      const updatePromises = txSnap.docs.map((docSnap) =>
+        updateDoc(doc(db, 'transactions', docSnap.id), { status: newStatus })
+      );
+      await Promise.all(updatePromises);
+  
       Alert.alert('Request approved');
     } catch (err) {
       console.error(err);
       Alert.alert('Error', 'Failed to approve request.');
     }
   };
+  
 
   // Reject a pending request
   const rejectRequest = async book => {
@@ -280,72 +310,74 @@ const AvailableBooks = () => {
           />
         );
 
-      case 'requests':
-        return (
-          <FlatList
-            data={books.filter(b => b.status === 'Pending')}
-            keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-              <View style={styles.bookRow}>
-                <View style={styles.bookDetails}>
-                  <Text >Book Tittle: {item.bookTitle}</Text>
-                     <Text>
-                    Requester: {item.requesterName} 
-                  </Text><Text>Type: {item.type}</Text>
-                  <Text>Status: {item.status}</Text>
-               
+        case 'requests':
+          return (
+            <FlatList
+              data={books.filter(b => b.status === 'Pending')}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.bookRow}>
+                  <View style={styles.bookDetails}>
+                    <Text>Book Title: {item.bookTitle}</Text>
+                    <Text>Requester: {item.requesterName}</Text>
+                    <Text>Type: {item.type}</Text>
+                    <Text>Status: {item.status}</Text>
+                    <Text>Start Date: {item.startDate}</Text>
+                    <Text>Due Date: {item.dueDate}</Text>
+                  </View>
+                  <View style={styles.actionButtons}>
+                    <Button title="Approve" onPress={() => approveRequest(item)} color="green" />
+                    <Button title="Reject" onPress={() => rejectRequest(item)} color="red" />
+                  </View>
                 </View>
-                <View style={styles.actionButtons}>
-                  <Button title="Approve" onPress={() => approveRequest(item)} color="green" />
-                  <Button title="Reject" onPress={() => rejectRequest(item)} color="red" />
-                </View>
-              </View>
-            )}
-            ListEmptyComponent={<Text style={styles.emptyText}>No requests</Text>}
-          />
-        );
+              )}
+              ListEmptyComponent={<Text style={styles.emptyText}>No requests</Text>}
+            />
+          );
+          
 
-      case 'borrowed':
-        return (
-          <FlatList
-            data={books.filter(b => b.status === 'Borrowed')}
-            keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-              <View style={styles.bookRow}>
-                <View style={styles.bookDetails}>
-                  <Text style={styles.bookTitle}>{item.bookTitle}</Text>
-                  <Text>
-                    Borrower: {item.requesterName}
-                  </Text>
-                  <Text>Due: {item.dueDate}</Text>
+        case 'borrowed':
+          return (
+            <FlatList
+              data={books.filter(b => b.status === 'Borrowed')}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.bookRow}>
+                  <View style={styles.bookDetails}>
+                    <Text>Book Title: {item.bookTitle}</Text>
+                    <Text>Borrower: {item.borrower}</Text>
+                    <Text>Due Date: {item.dueDate}</Text>
+                  </View>
+                  <View style={styles.actionButtons}>
+                    <Button title="Return" onPress={() => returnBook(item)} color="blue" />
+                  </View>
                 </View>
-                <Button title="Return" onPress={() => returnBook(item)} color="green" />
-              </View>
-            )}
-            ListEmptyComponent={<Text style={styles.emptyText}>No borrowed books</Text>}
-          />
-        );
-
-      case 'reserved':
-        return (
-          <FlatList
-            data={books.filter(b => b.status === 'Reserved')}
-            keyExtractor={item => item.id}
-            renderItem={({ item }) => (
-              <View style={styles.bookRow}>
-                <View style={styles.bookDetails}>
-                  <Text style={styles.bookTitle}>{item.bookTitle}</Text>
-                  <Text>
-                    Reserved by: {item.requesterName} 
-                  </Text>
-                  <Text>Due: {item.dueDate}</Text>
+              )}
+              ListEmptyComponent={<Text style={styles.emptyText}>No borrowed books</Text>}
+            />
+          );
+  
+        case 'reserved':
+          return (
+            <FlatList
+              data={books.filter(b => b.status === 'Reserved')}
+              keyExtractor={item => item.id}
+              renderItem={({ item }) => (
+                <View style={styles.bookRow}>
+                  <View style={styles.bookDetails}>
+                    <Text>Book Title: {item.bookTitle}</Text>
+                    <Text>Reserver: {item.reserver}</Text>
+                    <Text>Due Date: {item.dueDate}</Text>
+                  </View>
+                  <View style={styles.actionButtons}>
+                    <Button title="Return" onPress={() => returnBook(item)} color="blue" />
+                  </View>
                 </View>
-                <Button title="Return" onPress={() => returnBook(item)} color="green" />
-              </View>
-            )}
-            ListEmptyComponent={<Text style={styles.emptyText}>No reservations</Text>}
-          />
-        );
+              )}
+              ListEmptyComponent={<Text style={styles.emptyText}>No reserved books</Text>}
+            />
+          );
+  
 
       default:
         return null;

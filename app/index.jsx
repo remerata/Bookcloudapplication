@@ -58,7 +58,7 @@ const Home = () => {
       </View>
 
       <View style={styles.heroSection}>
-        <Text style={styles.heroTitle}>BOOK CLOUD</Text>
+        <Text style={styles.heroTitle}>SNSU Library</Text>
         <Text style={styles.heroSubtitle}>MANAGE YOUR LIBRARY BOOKS</Text>
         <TouchableOpacity
           style={styles.getStartedButton}

@@ -35,6 +35,7 @@ export default function User() {
   const [showReturnPicker, setShowReturnPicker] = useState(false);
 
   const [transactionHistory, setTransactionHistory] = useState([]);
+const [userInfo, setUserInfo] = useState(null);
 
   // Load books
   useEffect(() => {
@@ -62,7 +63,20 @@ export default function User() {
     );
     return () => unsub();
   }, []);
-
+  useEffect(() => {
+    const fetchUserInfo = async () => {
+      if (!auth.currentUser) return;
+      try {
+        const userDoc = await getDoc(doc(db, 'users', auth.currentUser.uid));
+        if (userDoc.exists()) {
+          setUserInfo(userDoc.data());
+        }
+      } catch (error) {
+        console.error('Error fetching user info:', error);
+      }
+    };
+    fetchUserInfo();
+  }, [profileModalVisible]);
   const handleLogout = async () => {
     await signOut(auth);
     setShowProfile(false);
@@ -283,15 +297,29 @@ export default function User() {
         </Modal>
 
         {/* Profile Modal */}
-        <Modal visible={profileModalVisible} transparent animationType="slide">
-          <View style={styles.modalContainer}>
-            <View style={styles.modalContent}>
-              <Button title="Edit Profile" onPress={navigateToProfile}/>
-              <Button title="Logout" onPress={handleLogout}/>
-              <Button title="Cancel" onPress={()=>setProfileModalVisible(false)}/>
-            </View>
-          </View>
-        </Modal>
+      {/* Profile Modal */}
+<Modal visible={profileModalVisible} transparent animationType="slide">
+  <View style={styles.modalContainer}>
+    <View style={styles.profileModalContent}>
+      {userInfo ? (
+        <>
+          <Text style={styles.profileTitle}>Profile Information</Text>
+          <Text style={styles.profileText}>Full Name: {userInfo.fullname}</Text>
+          <Text style={styles.profileText}>Email: {userInfo.email}</Text>
+          <Text style={styles.profileText}>Student ID: {userInfo.studentid}</Text>
+          <Text style={styles.profileText}>Course & Section: {userInfo.courseSection}</Text>
+          <Text style={styles.profileText}>Gender: {userInfo.gender}</Text>
+        </>
+      ) : (
+        <ActivityIndicator size="large" color="#000" />
+      )}
+      <View style={styles.profileButtons}>
+        <Button title="Close" onPress={() => setProfileModalVisible(false)} />
+      </View>
+    </View>
+  </View>
+</Modal>
+
       </>}
     </View>
   );
@@ -331,5 +359,34 @@ const styles = StyleSheet.create({
   txReserved:{color:'#8A2BE2'},
   txReturned:{color:'#32CD32'},
 
-  emptyText:{textAlign:'center',marginTop:20}
+  emptyText:{textAlign:'center',marginTop:20},
+
+  profileModalContent: {
+    backgroundColor: '#002D62',
+    margin: 20,
+    padding: 20,
+    borderRadius: 8,
+    alignItems: 'flex-start',
+  },
+  profileTitle: {
+    color: '#fff',
+    fontWeight: 'bold',
+    fontSize: 18,
+    marginBottom: 10,
+    alignSelf: 'center',
+    width: '100%',
+    textAlign: 'center',
+  },
+  profileText: {
+    color: '#fff',
+    fontSize: 16,
+    marginBottom: 6,
+  },
+  profileButtons: {
+    flexDirection: 'row',
+    justifyContent: 'space-between',
+    marginTop: 20,
+    width: '100%',
+  },
+  
 });
